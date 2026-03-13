@@ -1,0 +1,43 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth/auth";
+import { lostItemService } from "@/lib/services/lostItemService";
+
+export async function GET(
+  _: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { id } = await params;
+  const item = await lostItemService.getById(id);
+  if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Guests can only see their own items
+  if (session.user.role === "guest" && item.guestId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  return NextResponse.json({ data: item });
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { id } = await params;
+  const body = await request.json();
+
+  if (session.user.role === "guest") {
+    const updated = await lostItemService.update(id, session.user.id, body);
+    if (!updated) return NextResponse.json({ error: "Not found or forbidden" }, { status: 404 });
+    return NextResponse.json({ data: updated });
+  }
+
+  return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+}
